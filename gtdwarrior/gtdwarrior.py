@@ -14,127 +14,48 @@ def unique_field(func):
     return inner
 
 @unique_field
-def description():
-    print("Description:")
+def description(id):
+    description = read_cmd("{t} _get {id}.description".format(
+        t=TASK, id=id))
+    print("Description (blank for '{description}'):"
+          .format(description=description))
     return input(PROMPT)
 def bucket(name):
     @unique_field
-    def inner():
+    def inner(id):
         return 'bucket:{name}'.format(name=name)
     return inner
 @unique_field
-def project():
+def project(id):
     print("Project:")
     return "project:{project}".format(project=input(PROMPT))
 @unique_field
-def context():
+def context(id):
     print("Context:")
     return "+{context}".format(context=input(PROMPT).upper())
-def estimation():
+def estimation(id):
     print("Priority, energy, duration:")
     yield from ["{name}:{val}".format(name=name, val=val)
                 for name, val in zip(['priority', 'energy', 'duration'],
                                      input(PROMPT).split())]
 @unique_field
-def priority():
+def priority(id):
     print("Priority:")
     return "priority:{priority}".format(priority=input(PROMPT))
 @unique_field
-def aim():
+def aim(id):
     print("Aim:")
     return "aim:\'{aim}\'".format(aim=input(PROMPT))
-def tags():
+def persons(id):
     print("Persons:")
-    yield from ["+{person}".format(person=person)
-                for person in input(PROMPT).split()]
-def persons():
+    yield from ["+{person}".format(person=person)]
+def tags(id):
     print("Tags:")
     yield from ["+{tag}".format(tag=tag) for tag in input(PROMPT).split()]
-
-
-
-ACTIONS = {'N': [description, bucket('Next'), project,
-                 context, estimation, aim, tags],
-           'W': [description, bucket('Waiting'), project,
-                 aim, persons, priority, tags],
-           'S': [description, bucket('Someday'), project,
-                 context, tags],
-           'T': None,
-           'D': None,
-           'R': None}
-
-
-def main():
-    command = ''
-    if len(sys.argv) > 0:
-        inbox_id = sys.argv[1]
-        description = read_cmd("{t} _get {id}.description".format(
-            t=TASK, id=inbox_id))
-
-        print("Inbox ID: {id}".format(id=inbox_id))
-        print("Description: {desc}".format(desc=description))
-        while command not in ACTIONS.keys():
-            print("Action:")
-            print("\tNext(N), Someday/Maybe(S), WaitingFor(W)")
-            print("\tDone(D), Remove(R), Tickle(T)")
-            command = input(PROMPT)
-
-        new_id = duplicate(inbox_id)
-        command = list(itertools.chain([TASK, new_id, "modify"],
-                                       *[action()
-                                         for action in ACTIONS[command]]))
-        subprocess.call(command)
-        subprocess.call([TASK, inbox_id, "done"])
-        # if action == 'N':
-        #     add_to_next(inbox_id, description)
-        # elif action == 'S':
-        #     pass
-        # elif action == 'W':
-        #     pass
-        # elif action == 'T':
-        #     pass
-        # elif action == 'D':
-        #     subprocess.call([TASK, inbox_id, "done"])
-        # elif action == 'R':
-        #     subprocess.call([TASK, inbox_id, "rm"])
-    else:
-        print("Please provide the Inbox ID")
-
-
-def add_to_next(inbox_id, description):
-    print('Description (blank for "{desc}"):'.format(desc=description))
-    new_description = input(PROMPT)
-    if not new_description:
-        new_description = description
-
-    print("Project:")
-    project = input(PROMPT)
-
-    print("Context:")
-    context = input(PROMPT)
-
-    print("Priority, energy, duration:")
-    priority, energy, duration = input(PROMPT).split()
-
-    print("Aim:")
-    aim = input(PROMPT)
-
-    print("Tags")
-    tags = input(PROMPT).split()
-
-    new_id = duplicate(inbox_id)
-    command = [TASK, new_id, "modify",
-               new_description,
-               "bucket:Next",
-               "project:{project}".format(project=project),
-               "+{context}".format(context=context.upper()),
-               "priority:{pri}".format(pri=priority),
-               "energy:{ene}".format(ene=energy),
-               "duration:{dur}".format(dur=duration),
-               "aim:\\'{aim}\\'".format(aim=aim)]
-    command += ["+{tag}".format(tag=tag) for tag in tags]
-    subprocess.call(command)
-    subprocess.call([TASK, inbox_id, "done"])
+@unique_field
+def delay(id):
+    print('When should I tickle?')
+    return "wait:{delay}".format(delay=input(PROMPT))
 
 
 def duplicate(inbox_id):
@@ -142,6 +63,64 @@ def duplicate(inbox_id):
     confirm = read_cmd([TASK, inbox_id, "duplicate", "rc.verbose=new-id"],
                        shell=False)
     return confirm[left_trim:-right_trim]
+
+
+def modify(id, arguments):
+    command = list(itertools.chain(
+        [TASK, id, "modify"],
+        *[action(id) for action in arguments]))
+    subprocess.call(command)
+
+
+def process(inbox_id, arguments):
+    new_id = duplicate(inbox_id)
+    modify(new_id, arguments)
+    done(inbox_id, arguments)
+
+
+def done(id, arguments):
+    subprocess.call([TASK, id, "done"])
+
+
+def remove(id, arguments):
+    subprocess.call([TASK, id, "rm"])
+
+
+OPERATIONS = {
+    'N': {'command': process,
+          'arguments': [description, bucket('Next'), project,
+                        context, estimation, aim, tags]},
+    'W': {'command': process,
+          'arguments': [description, bucket('Waiting'), project,
+                        aim, persons, priority, tags]},
+    'S': {'command': process,
+          'arguments': [description, bucket('Someday'), project,
+                        context, tags]},
+    'T': {'command': modify, 'arguments': [delay]},
+    'D': {'command': done, 'arguments': []},
+    'R': {'command': remove, 'arguments': []}}
+
+
+def main():
+    answer = ''
+    if len(sys.argv) > 0:
+        inbox_id = sys.argv[1]
+        description = read_cmd("{t} _get {id}.description".format(
+            t=TASK, id=inbox_id))
+
+        print("Inbox ID: {id}".format(id=inbox_id))
+        print("Description: {desc}".format(desc=description))
+        while answer not in OPERATIONS.keys():
+            print("Action:")
+            print("\tNext(N), Someday/Maybe(S), WaitingFor(W)")
+            print("\tDone(D), Remove(R), Tickle(T)")
+            answer = input(PROMPT)
+
+        operation = OPERATIONS[answer]
+        command = operation['command']
+        command(inbox_id, operation['arguments'])
+    else:
+        print("Please provide the Inbox ID")
 
 
 def read_cmd(cmd, shell=True):
