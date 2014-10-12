@@ -8,10 +8,12 @@ import itertools
 TASK = "task"
 PROMPT = "> "
 
+
 def unique_field(func):
     def inner(*args, **kwargs):
         return [func(*args, **kwargs)]
     return inner
+
 
 @unique_field
 def description(id):
@@ -103,24 +105,27 @@ OPERATIONS = {
 
 def main():
     answer = ''
-    if len(sys.argv) > 0:
-        inbox_id = sys.argv[1]
-        description = read_cmd("{t} _get {id}.description".format(
-            t=TASK, id=inbox_id))
+    while True:
+        try:
+            inbox = read_cmd("{t} in rc.verbose=nothing".format(t=TASK))
+            inbox_id = inbox.split()[0]
+            description = read_cmd("{t} _get {id}.description".format(
+                t=TASK, id=inbox_id))
 
-        print("Inbox ID: {id}".format(id=inbox_id))
-        print("Description: {desc}".format(desc=description))
-        while answer not in OPERATIONS.keys():
-            print("Action:")
-            print("\tNext(N), Someday/Maybe(S), WaitingFor(W)")
-            print("\tDone(D), Remove(R), Tickle(T)")
-            answer = input(PROMPT)
+            print("Inbox ID: {id}".format(id=inbox_id))
+            print("Description: {desc}".format(desc=description))
+            while answer not in OPERATIONS.keys():
+                print("Action:")
+                print("\tNext(N), Someday/Maybe(S), WaitingFor(W)")
+                print("\tDone(D), Remove(R), Tickle(T)")
+                answer = input(PROMPT)
 
-        operation = OPERATIONS[answer]
-        command = operation['command']
-        command(inbox_id, operation['arguments'])
-    else:
-        print("Please provide the Inbox ID")
+            operation = OPERATIONS[answer]
+            command = operation['command']
+            command(inbox_id, operation['arguments'])
+        except Exception:
+            print("Congratulations, your inbox is empty")
+            return
 
 
 def read_cmd(cmd, shell=True):
