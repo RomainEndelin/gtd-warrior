@@ -125,8 +125,11 @@ def main():
             while answer not in OPERATIONS.keys():
                 print("Action:")
                 print("\tNext(N), Someday/Maybe(S), WaitingFor(W)")
-                print("\tDone(D), Remove(R), Tickle(T)")
+                print("\tDone(D), Remove(R), Tickle(T), Exit(Q)")
                 answer = input(PROMPT)
+
+                if answer == 'Q':
+                    return
 
             operation = OPERATIONS[answer]
             command = operation['command']
